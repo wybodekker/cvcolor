@@ -1,0 +1,284 @@
+#!/usr/bin/env ruby
+# encoding: utf-8
+
+ MYNAME = 'cvcolor'
+Version = '1.01'
+
+Help=
+<<'DOC'
+= cvcolor - convert color name or rgb to color name, hsv, rgb, and cmyk
+
+= Synopsis
+cvcolor [colorname...] ['redvalue greenvalue bluevalue'...]	
+
+== Options
+   -h              print this help and exit
+   -H, --help      print full documentation and exit
+   -V, --version   print version and exit
+
+= Description
+Given one or more color names, or quoted rgb triplets, cvcolor will print
+their rgb, hsv, and cmyk values.
+
+An unknown color name is matched against the color database and the any
+matches are reported.
+
+With no arguments, cvcolor will accept one color name or 3 numerical rgb
+values per line. The rgb values must either be in the range 0..1 or in the
+range ..255. cvcolor responds with the corresponding (nearest) color name
+and the rgb, hsv, and cmyk values.
+
+Colors are taken from |/etc/X11/rgb.txt|, but colors with spaces in their
+names are skipped (they have capitalized duplicates without spaces).
+
+= Examples
+  $ cvcolor DarkOliveGreen OliveDrab '.1 .2 .3' '25 50 75'
+  DarkOliveGreen
+         ________0-1____________    ___0-255___    __00-ff__
+  RGB:   0.333 0.420 0.184           85 107  47      556b2f
+  HSV:      82 0.561 0.420
+  CMYK:  0.086 0.000 0.235 0.580
+  
+  OliveDrab
+         ________0-1____________    ___0-255___    __00-ff__
+  RGB:   0.420 0.557 0.137          107 142  35      6b8e23
+  HSV:      79 0.754 0.557
+  CMYK:  0.137 0.000 0.420 0.443
+  
+  nearest color: DarkSlateGray
+  distance:      1.93%
+         ________0-1____________    ___0-255___    __00-ff__
+  RGB:   0.100 0.200 0.300           26  51  77      1a334d
+  HSV:     210 0.667 0.300
+  CMYK:  0.200 0.100 0.000 0.700
+  
+  nearest color: gray20
+  distance:      1.93%
+         ________0-1____________    ___0-255___    __00-ff__
+  RGB:   0.098 0.196 0.294           25  50  75      19324b
+  HSV:     210 0.667 0.294
+  CMYK:  0.196 0.098 0.000 0.706
+  
+  $ cvcolor drab
+  unknown color
+  I know about OliveDrab OliveDrab1 OliveDrab2 OliveDrab3 OliveDrab4
+  
+  $ cvcolor darkolivegreen
+  Database: DarkOliveGreen
+         ________0-1____________    ___0-255___    __00-ff__
+  RGB:   0.333 0.420 0.184           85 107  47      556b2f
+  HSV:      82 0.561 0.420
+  CMYK:  0.086 0.000 0.235 0.580
+  
+  $ cvcolor Blue
+  Database: blue
+         ________0-1____________    ___0-255___    __00-ff__
+  RGB:   0.541 0.169 0.886          138  43 226      8a2be2
+  HSV:     271 0.810 0.886
+  CMYK:  0.345 0.718 0.000 0.114
+  
+  $ cvcolor '.1 .2. .3'
+  nearest color: DarkSlateGray
+  distance:      1.93%
+         ________0-1____________    ___0-255___    __00-ff__
+  RGB:   0.100 0.200 0.300           26  51  77      1a334d
+  HSV:     210 0.667 0.300
+  CMYK:  0.200 0.100 0.000 0.700
+  
+  $ cvcolor '25.5 51 76.5'
+  nearest color: DarkSlateGray
+  distance:      1.93%
+         ________0-1____________    ___0-255___    __00-ff__
+  RGB:   0.100 0.200 0.300           26  51  77      1a334d
+  HSV:     210 0.667 0.300
+  CMYK:  0.200 0.100 0.000 0.700
+
+= Author
+[Wybo Dekker](wybo@dekkerdocumenten.nl)
+
+= Copyright
+Released under the [GNU General Public License](www.gnu.org/copyleft/gpl.html)
+DOC
+
+require 'optparse'
+
+def quit(mess=nil,exitvalue=1)
+   puts mess if mess
+   exit exitvalue
+end
+
+def handle_options
+   ARGV.options do |opts|
+     opts.banner="#{MYNAME} - convert color name or rgb to color name, hsv, rgb, and cmyk\n"
+     opts.separator ''
+     opts.summary_width=15
+     opts.summary_indent='  '
+
+     opts.on('-h','print this help and exit') do
+        quit opts.to_a.delete_if { |x| x =~ /—$/},0
+     end
+     opts.on('-H','--help', 'print full documentation and exit') do
+       quit Help,0
+     end
+     opts.on('-V','--version', 'print version and exit') do
+         quit Version,0
+     end
+     opts.on('-I','—') do
+        system("instscript #{MYNAME}")
+        exit
+     end
+     opts.parse!
+   end or exit 1
+end
+
+# convert rgb to hsv
+def hsv(r,g,b)
+   min = [r,g,b].min
+   max = [r,g,b].max
+   delta = max - min
+   return 0,0,max if delta == 0 # R == G == B => gray
+   s = delta/max
+   h = case max
+      when r then (g - b)/delta		# between yellow and magenta
+      when g then 2 + (b - r)/delta	# between cyan and yellow
+      else 4 + (r - g)/delta		# between magenta and cyan
+   end
+   h *= 60
+   h += 360 if h < 0
+   return h.to_i,s,max
+end
+
+# convert hsv to rgb
+def rgb(h,s,v)
+
+   # deliver gray for s == 0
+   return v,v,v if s == 0
+
+   # degrees => sectors
+   h %= 360
+   h /= 60
+   sector = h.to_i
+   secfract = h - sector
+   p = v * (1 - s)
+   q = v * (1 - s * secfract)
+   t = v * (1 - s * (1 - secfract))
+   return case sector
+      when 0 then [v,t,p]	# red       - yellow
+      when 1 then [q,v,p]	# yellow    - green
+      when 2 then [p,v,t]	# green     - lightblue
+      when 3 then [p,q,v]	# lightblue - darkblue
+      when 4 then [t,p,v]	# darkblue  - magenta
+      else        [v,p,q]       # magenta   - red
+   end   
+end
+
+# convert rgb to cmyk
+def cmyk(r,g,b)
+  c = 1 - r
+  m = 1 - g
+  y = 1 - b
+  k = [c,m,y].min
+  c = c - k
+  m = m - k
+  y = y - k
+  return [c,m,y,k]
+end
+
+# convert cmyk to rgb
+def cmyk2rgb(c,m,y,k)
+  c += k
+  m += k
+  y += k
+  return [1-c,1-m,1-y]
+end
+
+def cvcolor(color)
+   color = color.chomp
+   return if color == ''
+   mindist = 10.0
+   if color =~ /[a-z]/i # color name?
+      if @colors[color]
+         rgb = @colors[color]
+         hsv = hsv(*rgb)
+      else
+         known = Array.new
+         @colors.each { |k,v|
+            if k.downcase == color.downcase 
+               print "Database: "
+               cvcolor(k)
+               return
+            end
+            known.push k if k =~ /#{color}/i 
+         }
+         puts "unknown color"
+         puts "I know about #{known.join(' ')}\n\n" if known.size > 0
+         return
+      end
+   else # no: rgb values
+      rgb = color.split.collect { |x| x.to_f }
+      unless rgb.size == 3
+         quit "I need either 3 rgb values or a color name"
+         return
+      end
+      if rgb.max > 1 
+         prefix = "I assume your values are ranged between 0..255\n"
+         quit(prefix+"but then, any value > 255 is an error") if rgb.max > 255
+         quit(prefix+"but then, any value < 0 is an error") if rgb.min < 0
+         rgb.map! { |x| x/=255 }
+      else 
+         prefix = "I assume your values are ranged between 0..1\n"
+         quit(prefix+"but then, any value > 1 is an error") if rgb.max > 1
+         quit(prefix+"but then, any value < 0 is an error") if rgb.min < 0
+      end
+      hsv = hsv(*rgb)
+      mindist = 10.0
+      @colors.each { |c,ar| # find nearest color
+         d = 0
+         for i in 0..2 do d += (ar[i]-rgb[i])**2 end
+         if d < mindist
+            color = c
+            mindist = d
+         end
+      }
+   end
+   if mindist == 10.0
+     printf("%s\n",color)
+   else
+     printf("nearest color: %s\n",color)
+     printf("distance:      %4.2f%%\n",mindist*100)
+   end
+   printf("       ________0-1____________    ___0-255___    __00-ff__\n")
+   printf("RGB: %7.3f %5.3f %5.3f          %3d %3d %3d      %02x%02x%02x\n",
+      *(rgb + rgb.map { |v| (v*255).round }*2))
+   printf("HSV: %7d %5.3f %5.3f\n", hsv[0].round,hsv[1],hsv[2])
+   printf("CMYK: %6.3f %5.3f %5.3f %5.3f\n\n",*cmyk(*rgb))
+end
+
+handle_options
+
+rgb = "/etc/X11/rgb.txt"
+File.exist?(rgb) or quit("File #{rgb} not found")
+@colors = Hash.new
+open(rgb) do |f|
+  f.readlines.each do |l|
+    next if l =~ /rgb\.txt/ # first line
+    r,g,b,c = l.strip.split($;,4)
+    next if c =~ / / # no colors with spaces
+    @colors[c] = [r,g,b].collect { |x| x.to_f/255.0 }
+  end
+end
+
+if ARGV.size > 0
+   ARGV.each { |color| cvcolor(color) }
+else
+   puts "enter color names, one per line",
+               "or whitespace separated rgb values",
+	       "3 per line (range: 0..1 or 0..255)",
+               "stop with an empty line",""
+   Signal.trap("SIGINT") { exit }
+   while c = gets
+      c.chomp!
+      break if c.empty?
+      cvcolor(c)
+   end
+end
