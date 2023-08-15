@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # encoding: utf-8
 
- MYNAME = 'cvcolor'
+ Myname = 'cvcolor'
 Version = '1.01'
 
 Help=
@@ -101,34 +101,23 @@ Released under the [GNU General Public License](www.gnu.org/copyleft/gpl.html)
 DOC
 
 require 'optparse'
+require 'colorize'
 
-def quit(mess=nil,exitvalue=1)
-   puts mess if mess
-   exit exitvalue
+def warn(*m) mess :magenta,*m if $op.verbose; end
+def Warn(*m) mess :magenta,*m; end
+def die(*m) mess :red,*m; exit 1; end
+
+# print colored string(s), 1 line per argument
+def mess(color,*m)
+   name = Myname + ': '
+   m.each do |v|
+      STDERR.puts "#{name}#{v}".__send__(color)
+      name.gsub!(/./,' ')
+   end
 end
 
-def handle_options
-   ARGV.options do |opts|
-     opts.banner="#{MYNAME} - convert color name or rgb to color name, hsv, rgb, and cmyk\n"
-     opts.separator ''
-     opts.summary_width=15
-     opts.summary_indent='  '
-
-     opts.on('-h','print this help and exit') do
-        quit opts.to_a.delete_if { |x| x =~ /—$/},0
-     end
-     opts.on('-H','--help', 'print full documentation and exit') do
-       quit Help,0
-     end
-     opts.on('-V','--version', 'print version and exit') do
-         quit Version,0
-     end
-     opts.on('-I','—') do
-        system("instscript #{MYNAME}")
-        exit
-     end
-     opts.parse!
-   end or exit 1
+def help
+  system("echo \"#{Help}\" | less -P#{Myname}-#{Version.tr('.','·')}")
 end
 
 # convert rgb to hsv
@@ -217,18 +206,18 @@ def cvcolor(color)
    else # no: rgb values
       rgb = color.split.collect { |x| x.to_f }
       unless rgb.size == 3
-         quit "I need either 3 rgb values or a color name"
+         die "I need either 3 rgb values or a color name"
          return
       end
       if rgb.max > 1 
          prefix = "I assume your values are ranged between 0..255\n"
-         quit(prefix+"but then, any value > 255 is an error") if rgb.max > 255
-         quit(prefix+"but then, any value < 0 is an error") if rgb.min < 0
+         die(prefix+"but then, any value > 255 is an error") if rgb.max > 255
+         die(prefix+"but then, any value < 0 is an error") if rgb.min < 0
          rgb.map! { |x| x/=255 }
       else 
          prefix = "I assume your values are ranged between 0..1\n"
-         quit(prefix+"but then, any value > 1 is an error") if rgb.max > 1
-         quit(prefix+"but then, any value < 0 is an error") if rgb.min < 0
+         die(prefix+"but then, any value > 1 is an error") if rgb.max > 1
+         die(prefix+"but then, any value < 0 is an error") if rgb.min < 0
       end
       hsv = hsv(*rgb)
       mindist = 10.0
@@ -254,10 +243,37 @@ def cvcolor(color)
    printf("CMYK: %6.3f %5.3f %5.3f %5.3f\n\n",*cmyk(*rgb))
 end
 
-handle_options
+OptionParser.new(
+   banner = <<~EOD,
+	#{Myname} - convert color name or rgb to color name, hsv, rgb, and cmyk\n
+	Usage: #{Myname} [colorname...] ['redvalue greenvalue bluevalue'...]\n
+	Options:
+	EOD
+   width = 15,
+   indent = ''
+) do |opts|
+
+  opts.on('-h','print this help and exit') do
+     puts opts.to_a.delete_if { |x| x =~ /—$/}
+     exit
+  end
+  opts.on('-H','--help', 'print full documentation and exit') do
+     help
+     exit
+  end
+  opts.on('-V','--version', 'print version and exit') do
+      puts Version
+      exit
+  end
+  opts.on('-I','—') do
+     system("instscript #{Myname}")
+     exit
+  end
+  opts.parse!
+end
 
 rgb = "/etc/X11/rgb.txt"
-File.exist?(rgb) or quit("File #{rgb} not found")
+File.exist?(rgb) or die("File #{rgb} not found")
 @colors = Hash.new
 open(rgb) do |f|
   f.readlines.each do |l|
