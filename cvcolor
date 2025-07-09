@@ -2,7 +2,7 @@
 # encoding: utf-8
 
  Myname = 'cvcolor'
-Version = '1.01'
+Version = '1.02'
 
 Help=
 <<'DOC'
@@ -94,7 +94,7 @@ names are skipped (they have capitalized duplicates without spaces).
   CMYK:  0.200 0.100 0.000 0.700
 
 = Author
-[Wybo Dekker](wybo@dekkerdocumenten.nl)
+[Wybo Dekker](wybodekker@me.com)
 
 = Copyright
 Released under the [GNU General Public License](www.gnu.org/copyleft/gpl.html)
