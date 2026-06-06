@@ -117,7 +117,8 @@ def mess(color,*m)
 end
 
 def help
-  system("echo \"#{Help}\" | less -P#{Myname}-#{Version.tr('.','·')}")
+  nv="-#{Myname}-#{Version.sub(/\./,'\\.')} press h for help, q to quit"
+  IO.popen("less -P'#{nv}'",'w') do |pipe| pipe.puts Help end
 end
 
 # convert rgb to hsv
@@ -266,7 +267,8 @@ OptionParser.new(
       exit
   end
   opts.on('-I','—') do
-     system("instscript #{Myname}")
+     system("instscript #{Myname}") or
+         die 'the -I option is for developers only'
      exit
   end
   opts.parse!
